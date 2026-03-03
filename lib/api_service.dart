@@ -4,8 +4,8 @@ import 'package:http/http.dart' as http;
 class ApiService {
   // Use http://10.0.2.2:5000 for Android emulator
   // Use http://localhost:5000 for iOS simulator or Web
-//   static const String baseUrl = "http://localhost:5000/api";
-static const String baseUrl = "http://192.168.29.245:5000/api";
+  static const String baseUrl = "http://localhost:5000/api";
+// static const String baseUrl = "http://192.168.29.245:5000/api";
   static Future<Map<String, dynamic>?> signup(String username, String email, String password) async {
     try {
       final response = await http.post(
