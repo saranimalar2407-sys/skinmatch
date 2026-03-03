@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart'; 
+import 'api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const MyApp());
 
@@ -7,8 +9,16 @@ void main() => runApp(const MyApp());
 ========================================================= */
 class AppState extends ChangeNotifier {
   final List<Product> wishlist = [];
+  Map<String, dynamic>? currentUser;
+  String? authToken;
 
   bool isWishlisted(Product p) => wishlist.any((x) => x.id == p.id);
+
+  void setUser(Map<String, dynamic>? user, String? token) {
+    currentUser = user;
+    authToken = token;
+    notifyListeners();
+  }
 
   void toggleWishlist(Product p) {
     if (isWishlisted(p)) {
@@ -59,6 +69,18 @@ class Product {
     required this.price,
     required this.imageUrl,
   });
+
+  factory Product.fromJson(Map<String, dynamic> json) {
+    return Product(
+      id: json['_id'] ?? json['id'] ?? '',
+      brand: json['brand'] ?? '',
+      name: json['name'] ?? '',
+      finish: json['finish'] ?? '',
+      undertone: json['undertone'] ?? '',
+      price: json['price'] ?? '',
+      imageUrl: json['imageUrl'] ?? '',
+    );
+  }
 }
 
 /* =========================================================
@@ -240,20 +262,29 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _submitLogin() {
+  Future<void> _submitLogin() async {
     if (!_loginKey.currentState!.validate()) return;
 
-    final u = _loginUser.text.trim();
-    final p = _loginPass.text;
+    final email = _loginUser.text.trim();
+    final pass = _loginPass.text;
 
-    final ok = (u == "saranimalar2407@gmail.com" || u == "saranya") && p == "saranya";
-    if (!ok) {
-      _toast("Invalid email/username or password (demo)");
+    final response = await ApiService.login(email, pass);
+    print("LOGIN RESPONSE: $response");
+    if (response == null) {
+      _toast("Invalid email or password");
       return;
     }
 
-    _toast("Login successfully");
-    _goForm();
+   // 👇 ADD THIS
+final prefs = await SharedPreferences.getInstance();
+await prefs.setString("token", response['token']);
+await prefs.setString("userId", response['user']['id']);
+
+final state = AppScope.of(context);
+state.setUser(response['user'], response['token']);
+
+_toast("Login successfully");
+_goForm();
   }
 
   List<String> _suggestUsernames(String desired) {
@@ -270,30 +301,12 @@ class _AuthScreenState extends State<AuthScreen> {
     return hasUpper && hasLower && hasDigit && hasSpecial;
   }
 
-  void _submitSignup() {
+  Future<void> _submitSignup() async {
     if (!_signupKey.currentState!.validate()) return;
 
     final email = _signEmail.text.trim().toLowerCase();
     final username = _signUser.text.trim().toLowerCase();
     final pass = _signPass.text;
-
-    if (_takenUsernames.contains(username)) {
-      final suggestions = _suggestUsernames(username);
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text("Username not available"),
-          content: Text("Try one of these:\n\n• ${suggestions.join("\n• ")}"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("OK"),
-            )
-          ],
-        ),
-      );
-      return;
-    }
 
     if (!email.contains("@") || !email.contains(".")) {
       _toast("Enter valid email");
@@ -305,6 +318,15 @@ class _AuthScreenState extends State<AuthScreen> {
           "Password must be exactly 16 chars with Upper, Lower, Number, Special.");
       return;
     }
+
+    final response = await ApiService.signup(username, email, pass);
+    if (response == null) {
+      _toast("Signup failed. User might already exist.");
+      return;
+    }
+
+    final state = AppScope.of(context);
+    state.setUser(response['user'], response['token']);
 
     _toast("Sign up success ");
     _goForm();
@@ -519,7 +541,7 @@ class _SkinFormScreenState extends State<SkinFormScreen> {
   void _toast(String msg) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
     final ageVal = int.tryParse(_age.text.trim()) ?? 0;
@@ -533,6 +555,14 @@ class _SkinFormScreenState extends State<SkinFormScreen> {
       return;
     }
 
+    final state = AppScope.of(context);
+    final userId = state.currentUser?['id'];
+
+    if (userId == null) {
+      _toast("User not logged in");
+      return;
+    }
+
     final data = SkinFormData(
       fullName: _fullName.text.trim(),
       age: ageVal,
@@ -541,6 +571,21 @@ class _SkinFormScreenState extends State<SkinFormScreen> {
       undertone: undertone,
       shadeLevel: shadeLevel,
     );
+
+    // Save to backend
+    final success = await ApiService.saveSkinData({
+      "userId": userId,
+      "fullName": data.fullName,
+      "age": data.age,
+      "gender": data.gender,
+      "skinType": data.skinType,
+      "undertone": data.undertone,
+      "shadeLevel": data.shadeLevel,
+    });
+
+    if (!success) {
+      _toast("Failed to save skin details. (check backend)");
+    }
 
     Navigator.pushReplacement(
       context,
@@ -1093,73 +1138,18 @@ class _Eye extends StatelessWidget {
 }
 
 /* =========================================================
-   STEP 5: SHOP PAGE (Image fixed: loader + error fallback)
+   STEP 5: SHOP PAGE
 ========================================================= */
 class ShopScreen extends StatelessWidget {
   final String undertone;
-  const ShopScreen({super.key, required this.undertone});
 
-  static const _allProducts = <Product>[
-    Product(
-      id: "p1",
-      brand: "Maybelline",
-      name: "Fit Me Matte + Poreless",
-      finish: "Liquid • Matte",
-      undertone: "Neutral",
-      price: "₹499",
-      imageUrl:
-          "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=800&q=80",
-    ),
-    Product(
-      id: "p2",
-      brand: "L'Oréal Paris",
-      name: "Infallible Fresh Wear",
-      finish: "Liquid • Longwear",
-      undertone: "Warm",
-      price: "₹899",
-      imageUrl:
-          "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=800&q=80",
-    ),
-    Product(
-      id: "p3",
-      brand: "M·A·C",
-      name: "Studio Fix Fluid",
-      finish: "Liquid • Matte",
-      undertone: "Cool",
-      price: "₹3499",
-      imageUrl:
-          "https://cdn.mos.cms.futurecdn.net/7q6rQ7uHYTMU328YB4KNEP.jpg",
-    ),
-    Product(
-      id: "p4",
-      brand: "Fenty Beauty",
-      name: "Pro Filt'r Soft Matte",
-      finish: "Liquid • Soft Matte",
-      undertone: "Warm",
-      price: "₹3999",
-      imageUrl:
-          "https://images.unsplash.com/photo-1612810436541-336d0e7f50b2?auto=format&fit=crop&w=800&q=80",
-    ),
-    Product(
-      id: "p5",
-      brand: "NYX",
-      name: "Can't Stop Won't Stop",
-      finish: "Liquid • Full Coverage",
-      undertone: "Neutral",
-      price: "₹999",
-      imageUrl:
-          "https://images.unsplash.com/photo-1615397349754-cfa2066a2981?auto=format&fit=crop&w=800&q=80",
-    ),
-  ];
+  const ShopScreen({
+    super.key,
+    required this.undertone,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final state = AppScope.of(context);
-
-    final items = _allProducts
-        .where((p) => p.undertone.toLowerCase() == undertone.toLowerCase())
-        .toList();
-
     return Scaffold(
       appBar: AppBar(
         title: Text("Foundations ($undertone)"),
@@ -1168,147 +1158,153 @@ class ShopScreen extends StatelessWidget {
             tooltip: "Wishlist",
             icon: const Icon(Icons.favorite),
             onPressed: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const WishlistScreen()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WishlistScreen()),
+              );
             },
           ),
         ],
       ),
-      body: items.isEmpty
-          ? Center(
+      body: FutureBuilder<List<dynamic>>(
+        future: ApiService.fetchProducts(undertone),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
+
+          final data = snapshot.data ?? [];
+          final items = data.map((e) => Product.fromJson(e)).toList();
+
+          if (items.isEmpty) {
+            return Center(
               child: Text(
                 "No products available for $undertone undertone.",
                 textAlign: TextAlign.center,
               ),
-            )
-          : Padding(
-              padding: const EdgeInsets.all(12),
-              child: GridView.builder(
-                itemCount: items.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.72,
-                ),
-                itemBuilder: (context, i) {
-                  final p = items[i];
-                  final liked = state.isWishlisted(p);
+            );
+          }
 
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.black12),
-                      boxShadow: [
-                        BoxShadow(
-                          blurRadius: 16,
-                          color: Colors.black.withOpacity(0.06),
-                          offset: const Offset(0, 8),
-                        )
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: Stack(
-                            children: [
-                              // ✅ IMAGE FIXED HERE
-                              ClipRRect(
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(18),
-                                ),
-                                child: AspectRatio(
-                                  aspectRatio: 1.15, // keeps image visible
-                                  child: Image.network(
-                                    p.imageUrl,
-                                    fit: BoxFit.cover,
-                                    loadingBuilder: (context, child, progress) {
-                                      if (progress == null) return child;
-                                      return Container(
-                                        color: Colors.black12,
-                                        alignment: Alignment.center,
-                                        child: const CircularProgressIndicator(),
-                                      );
-                                    },
-                                    errorBuilder: (context, error, stack) {
-                                      return Container(
-                                        color: Colors.black12,
-                                        alignment: Alignment.center,
-                                        child: const Icon(
-                                          Icons.image_not_supported_outlined,
-                                          size: 34,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
+          final state = AppScope.of(context);
 
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: InkWell(
-                                  onTap: () => state.toggleWishlist(p),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.9),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Icon(
-                                      liked ? Icons.favorite : Icons.favorite_border,
-                                      color: liked ? Colors.pink : Colors.black54,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(p.brand,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w900)),
-                              const SizedBox(height: 4),
-                              Text(
-                                p.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "${p.finish} • ${p.undertone}",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black.withOpacity(0.55),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                p.price,
-                                style: const TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w900),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: GridView.builder(
+              itemCount: items.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.72,
               ),
+              itemBuilder: (context, i) {
+                final p = items[i];
+                final liked = state.isWishlisted(p);
+
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(18),
+                              ),
+                              child: Image.network(
+                                p.imageUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                loadingBuilder:
+                                    (context, child, progress) {
+                                  if (progress == null) return child;
+                                  return const Center(
+                                      child:
+                                          CircularProgressIndicator());
+                                },
+                                errorBuilder:
+                                    (context, error, stack) {
+                                  return const Center(
+                                    child: Icon(
+                                      Icons.image_not_supported_outlined,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: InkWell(
+                                onTap: () =>
+                                    state.toggleWishlist(p),
+                                child: Icon(
+                                  liked
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  color: liked
+                                      ? Colors.pink
+                                      : Colors.black54,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding:
+                            const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(p.brand,
+                                style: const TextStyle(
+                                    fontWeight:
+                                        FontWeight.w900)),
+                            const SizedBox(height: 4),
+                            Text(p.name,
+                                maxLines: 2,
+                                overflow:
+                                    TextOverflow.ellipsis),
+                            const SizedBox(height: 4),
+                            Text(
+                              "${p.finish} • ${p.undertone}",
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              p.price,
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight:
+                                      FontWeight.w900),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
+          );
+        },
+      ),
     );
   }
 }
-
 /* =========================================================
    WISHLIST PAGE
 ========================================================= */
