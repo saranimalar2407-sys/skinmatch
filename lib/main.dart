@@ -270,7 +270,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final pass = _loginPass.text;
 
     final response = await ApiService.login(email, pass);
-    print("LOGIN RESPONSE: $response");
+    // print("LOGIN RESPONSE: $response");
     if (response == null) {
       _toast("Invalid email or password");
       return;

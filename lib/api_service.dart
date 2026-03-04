@@ -3,10 +3,11 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
 
-  static const String baseUrl = "http://localhost:5000/api";
-  // static const String baseUrl = "http://192.168.29.245:5000/api";
+  static const String baseUrl = "http://192.168.29.245:5000/api";
 
-  static Future<Map<String, dynamic>?> signup(String username, String email, String password) async {
+  // SIGNUP
+  static Future<Map<String, dynamic>?> signup(
+      String username, String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse("$baseUrl/auth/signup"),
@@ -18,17 +19,21 @@ class ApiService {
         }),
       );
 
+print("SIGNUP STATUS: ${response.statusCode}");
+print("SIGNUP BODY: ${response.body}");
+
       if (response.statusCode == 201) {
         return jsonDecode(response.body);
       }
     } catch (e) {
       print("Signup error: $e");
     }
-
     return null;
   }
 
-  static Future<Map<String, dynamic>?> login(String email, String password) async {
+  // LOGIN
+  static Future<Map<String, dynamic>?> login(
+      String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse("$baseUrl/auth/login"),
@@ -38,6 +43,8 @@ class ApiService {
           "password": password,
         }),
       );
+    print("LOGIN STATUS: ${response.statusCode}");
+    print("LOGIN BODY: ${response.body}");
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -45,10 +52,10 @@ class ApiService {
     } catch (e) {
       print("Login error: $e");
     }
-
     return null;
   }
 
+  // FETCH PRODUCTS
   static Future<List<dynamic>> fetchProducts(String undertone) async {
     try {
       final response = await http.get(
@@ -61,10 +68,10 @@ class ApiService {
     } catch (e) {
       print("Fetch products error: $e");
     }
-
     return [];
   }
 
+  // SAVE SKIN DATA
   static Future<bool> saveSkinData(Map<String, dynamic> data) async {
     try {
       final response = await http.post(
@@ -77,11 +84,10 @@ class ApiService {
     } catch (e) {
       print("Save skin data error: $e");
     }
-
     return false;
   }
 
-  // ✅ ADD THIS INSIDE THE CLASS
+  // GET SKIN DATA
   static Future<Map<String, dynamic>?> getSkinData(String userId) async {
     try {
       final response = await http.get(
@@ -94,7 +100,6 @@ class ApiService {
     } catch (e) {
       print("Get skin data error: $e");
     }
-
     return null;
   }
 }
