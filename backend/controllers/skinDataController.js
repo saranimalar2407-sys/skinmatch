@@ -12,10 +12,15 @@ exports.saveSkinData = async (req, res) => {
 };
 
 exports.getSkinDataByUser = async (req, res) => {
-    try {
-        const data = await SkinData.find({ userId: req.params.userId });
-        res.json(data);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+  try {
+    const data = await SkinData.findOne({ userId: req.params.userId });
+
+    if (!data) {
+      return res.status(404).json({ message: "No data found" });
     }
+
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };

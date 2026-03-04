@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart'; 
 import 'api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'profile.dart';
 
 void main() => runApp(const MyApp());
 
@@ -284,7 +285,29 @@ final state = AppScope.of(context);
 state.setUser(response['user'], response['token']);
 
 _toast("Login successfully");
-_goForm();
+final userId = response['user']['id'];
+
+final existingData = await ApiService.getSkinData(userId);
+
+if (existingData != null) {
+  final data = SkinFormData(
+    fullName: existingData['fullName'],
+    age: existingData['age'],
+    gender: existingData['gender'],
+    skinType: existingData['skinType'],
+    undertone: existingData['undertone'],
+    shadeLevel: existingData['shadeLevel'],
+  );
+
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (_) => MannequinScreen(data: data),
+    ),
+  );
+} else {
+  _goForm();
+}
   }
 
   List<String> _suggestUsernames(String desired) {
@@ -802,19 +825,40 @@ class _MannequinScreenState extends State<MannequinScreen> {
     final applied = _adjustShade(base, shadeAdjust);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Shade Preview"),
-        actions: [
-          IconButton(
-            tooltip: "Wishlist",
-            icon: const Icon(Icons.favorite),
-            onPressed: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const WishlistScreen()));
-            },
-          )
-        ],
-      ),
+appBar: AppBar(
+  title: const Text("Shade Preview"),
+  actions: [
+
+    // 👤 PROFILE BUTTON
+    IconButton(
+      icon: const Icon(Icons.person),
+      onPressed: () {
+        final state = AppScope.of(context);
+        final userId = state.currentUser?['id'];
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProfileScreen(userId: userId),
+          ),
+        );
+      },
+    ),
+
+    // ❤️ WISHLIST BUTTON
+    IconButton(
+      icon: const Icon(Icons.favorite),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const WishlistScreen(),
+          ),
+        );
+      },
+    ),
+  ],
+),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -1154,6 +1198,21 @@ class ShopScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text("Foundations ($undertone)"),
         actions: [
+          // 👤 PROFILE BUTTON
+    IconButton(
+      icon: const Icon(Icons.person),
+      onPressed: () {
+        final state = AppScope.of(context);
+        final userId = state.currentUser?['id'];
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProfileScreen(userId: userId),
+          ),
+        );
+      },
+    ),
           IconButton(
             tooltip: "Wishlist",
             icon: const Icon(Icons.favorite),
