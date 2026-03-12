@@ -316,12 +316,7 @@ if (existingData != null) {
   }
 
   bool _isStrongPassword(String s) {
-    if (s.length != 16) return false;
-    final hasUpper = RegExp(r'[A-Z]').hasMatch(s);
-    final hasLower = RegExp(r'[a-z]').hasMatch(s);
-    final hasDigit = RegExp(r'\d').hasMatch(s);
-    final hasSpecial = RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(s);
-    return hasUpper && hasLower && hasDigit && hasSpecial;
+    return s.length >= 5;
   }
 
   Future<void> _submitSignup() async {
@@ -338,7 +333,7 @@ if (existingData != null) {
 
     if (!_isStrongPassword(pass)) {
       _toast(
-          "Password must be exactly 16 chars with Upper, Lower, Number, Special.");
+          "Password must be at least 5 characters.");
       return;
     }
 
@@ -496,7 +491,7 @@ if (existingData != null) {
             obscureText: _hideSignPass,
             decoration: InputDecoration(
               hintText: "Password",
-              helperText: "Exactly 16 chars. Upper+lower+number+special.",
+              helperText: "Minimum 5 characters.",
               suffixIcon: IconButton(
                 onPressed: () => setState(() => _hideSignPass = !_hideSignPass),
                 icon:
@@ -506,7 +501,7 @@ if (existingData != null) {
             validator: (v) {
               final s = v ?? "";
               if (s.isEmpty) return "Enter password";
-              if (s.length != 16) return "Must be exactly 16 characters";
+              if (s.length < 5) return "Must be at least 5 characters";
               return null;
             },
           ),

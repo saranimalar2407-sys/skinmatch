@@ -3,8 +3,9 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
 
-  static const String baseUrl = "http://192.168.29.245:5000/api";
-
+//   static const String baseUrl = "http://192.168.29.245:5000/api";
+// static const String baseUrl = "http://localhost:5000/api";
+static const String baseUrl = "https://skinmatch-g48i.onrender.com/api";
   // SIGNUP
   static Future<Map<String, dynamic>?> signup(
       String username, String email, String password) async {
